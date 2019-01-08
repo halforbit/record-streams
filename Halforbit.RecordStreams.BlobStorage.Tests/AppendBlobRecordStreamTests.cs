@@ -305,6 +305,4 @@ namespace Halforbit.RecordStreams.BlobStorage.Tests
 
         public string Address { get; }
     }
-
-
 }

@@ -18,7 +18,7 @@ namespace Halforbit.RecordStreams.Serialization.ByteSpan.Implementation
         {
             if(!typeof(TRecord).Equals(typeof(byte[])))
             {
-                throw new Exception("Byte span serialization may only be used with type byte[]");
+                throw new ArgumentException("Byte span serialization may only be used with records of type byte[]");
             }
 
             if (bytes.Length < _spanLength) return (default, 0);
@@ -30,7 +30,7 @@ namespace Halforbit.RecordStreams.Serialization.ByteSpan.Implementation
         {
             if (!typeof(TRecord).Equals(typeof(byte[])))
             {
-                throw new Exception("Byte span serialization may only be used with type byte[]");
+                throw new ArgumentException("Byte span serialization may only be used with records of type byte[]");
             }
             
             var recordBytes = (byte[])(object)record;
