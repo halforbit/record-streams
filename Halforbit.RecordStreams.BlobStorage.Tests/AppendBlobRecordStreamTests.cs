@@ -2,6 +2,7 @@ using Halforbit.Facets.Implementation;
 using Halforbit.RecordStreams.BlobStorage.Facets;
 using Halforbit.RecordStreams.Facets;
 using Halforbit.RecordStreams.Interface;
+using Halforbit.RecordStreams.Serialization.ByteSpan.Facets;
 using Halforbit.RecordStreams.Serialization.JsonLines.Facets;
 using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
@@ -32,34 +33,16 @@ namespace Halforbit.RecordStreams.BlobStorage.Tests
         }
 
         [Fact]
-        public async Task AppendBlobRecordStreamIntegrationTest()
+        public async Task AppendBlobRecordStream_JsonLines_IntegrationTest()
         {
-            var context = new ContextFactory(new FrameworkConfigurationProvider(_configuration)).Create<ITestContext>();
-
-            var recordStream = context.TestRecordStream;
-
             var now = new DateTime(2018, 12, 16, 1, 23, 45);
-
-            var streamKey = Guid.NewGuid();
-
-            var existsA = await recordStream.Exists(streamKey);
-
-            Assert.False(existsA);
-
-            var listA = await (await recordStream.EnumerateAsync(streamKey)).ToListAsync();
-
-            Assert.Empty(listA);
-
-            var deleteResultA = await recordStream.Delete(streamKey);
-
-            Assert.False(deleteResultA);
 
             var batchA = new[]
             {
                 new TestRecord(
-                    now, 
-                    Guid.NewGuid(), 
-                    "null", 
+                    now,
+                    Guid.NewGuid(),
+                    "null",
                     new TestSubRecord("123 Fake St"),
                     3),
 
@@ -71,18 +54,6 @@ namespace Halforbit.RecordStreams.BlobStorage.Tests
                     4,
                     new[] { "James", "John" }),
             };
-
-            await recordStream.Append(
-                key: streamKey,
-                records: batchA);
-
-            var existsB = await recordStream.Exists(streamKey);
-
-            Assert.True(existsB);
-
-            var listB = await (await recordStream.EnumerateAsync(streamKey)).ToListAsync();
-
-            AssertJsonEqual(batchA, listB);
 
             now = now.AddHours(1);
 
@@ -104,6 +75,119 @@ namespace Halforbit.RecordStreams.BlobStorage.Tests
                     0),
             };
 
+            var batchC = new TestRecord[0];
+
+            var context = new ContextFactory(new FrameworkConfigurationProvider(_configuration)).Create<ITestContext>();
+
+            var recordStream = context.TestJsonLinesRecordStream;
+
+            await TestRecordStream(batchA, batchB, batchC, recordStream);
+        }
+
+        [Fact]
+        public async Task AppendBlobRecordStream_ByteSpans_IntegrationTest()
+        {
+            var random = new Random();
+
+            var batchA = new[]
+            {
+                new byte[123],
+
+                new byte[234]
+            };
+
+            random.NextBytes(batchA[0]);
+
+            random.NextBytes(batchA[1]);
+
+            var batchB = new[]
+            {
+                new byte[512],
+
+                new byte[4096]
+            };
+
+            random.NextBytes(batchB[0]);
+
+            random.NextBytes(batchB[1]);
+
+            var batchC = new byte[0][];
+
+            var context = new ContextFactory(new FrameworkConfigurationProvider(_configuration)).Create<ITestContext>();
+
+            var recordStream = context.TestByteSpanRecordStream;
+
+            await TestRecordStream(batchA, batchB, batchC, recordStream);
+        }
+
+        [Fact]
+        public async Task AppendBlobRecordStream_FixedByteSpans_IntegrationTest()
+        {
+            var random = new Random();
+
+            var batchA = new[]
+            {
+                new byte[123],
+
+                new byte[123]
+            };
+
+            random.NextBytes(batchA[0]);
+
+            random.NextBytes(batchA[1]);
+
+            var batchB = new[]
+            {
+                new byte[123],
+
+                new byte[123]
+            };
+
+            random.NextBytes(batchB[0]);
+
+            random.NextBytes(batchB[1]);
+
+            var batchC = new byte[0][];
+
+            var context = new ContextFactory(new FrameworkConfigurationProvider(_configuration)).Create<ITestContext>();
+
+            var recordStream = context.TestFixedByteSpanRecordStream;
+
+            await TestRecordStream(batchA, batchB, batchC, recordStream);
+        }
+
+        async Task TestRecordStream<TValue>(
+            TValue[] batchA,
+            TValue[] batchB,
+            TValue[] batchC,
+            IRecordStream<Guid, TValue> recordStream)
+        {
+            var streamKey = Guid.NewGuid();
+
+            var existsA = await recordStream.Exists(streamKey);
+
+            Assert.False(existsA);
+
+            var listA = await (await recordStream.EnumerateAsync(streamKey)).ToListAsync();
+
+            Assert.Empty(listA);
+
+            var deleteResultA = await recordStream.Delete(streamKey);
+
+            Assert.False(deleteResultA);
+
+            await recordStream.Append(
+                key: streamKey,
+                records: batchA);
+
+            var existsB = await recordStream.Exists(streamKey);
+
+            Assert.True(existsB);
+
+            var listB = await (await recordStream.EnumerateAsync(streamKey)).ToListAsync();
+
+            AssertJsonEqual(batchA, listB);
+
             await recordStream.Append(
                 key: streamKey,
                 records: batchB);
@@ -111,8 +195,6 @@ namespace Halforbit.RecordStreams.BlobStorage.Tests
             var listC = await (await recordStream.EnumerateAsync(streamKey)).ToListAsync();
 
             AssertJsonEqual(batchA.Concat(batchB).ToList(), listC);
-
-            var batchC = new TestRecord[0];
 
             await recordStream.Append(
                 key: streamKey,
@@ -160,7 +242,21 @@ namespace Halforbit.RecordStreams.BlobStorage.Tests
         [FileExtension(".jsonl"), ContentType("application/x-jsonlines")]
         //[GZipCompression, ContentEncoding("gzip")]
         [KeyMap("append-blob-record-stream/{this}")]
-        IRecordStream<Guid, TestRecord> TestRecordStream { get; }
+        IRecordStream<Guid, TestRecord> TestJsonLinesRecordStream { get; }
+
+        [ConnectionString(configKey: "ConnectionString")]
+        [ContainerName("record-streams-test")]
+        [ByteSpanRecordSerialization]
+        [FileExtension(".raw"), ContentType("application/octet-stream")]
+        [KeyMap("append-blob-record-stream/{this}")]
+        IRecordStream<Guid, byte[]> TestByteSpanRecordStream { get; }
+
+        [ConnectionString(configKey: "ConnectionString")]
+        [ContainerName("record-streams-test")]
+        [FixedByteSpanRecordSerialization("123")]
+        [FileExtension(".raw"), ContentType("application/octet-stream")]
+        [KeyMap("append-blob-record-stream/{this}")]
+        IRecordStream<Guid, byte[]> TestFixedByteSpanRecordStream { get; }
     }
 
     public class TestRecord

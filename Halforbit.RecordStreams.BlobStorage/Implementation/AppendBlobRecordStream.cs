@@ -67,11 +67,13 @@ namespace Halforbit.RecordStreams.BlobStorage.Implementation
             IEnumerable<TRecord> records)
         {
             var appendBlob = GetAppendBlob(key);
-
+            
             if(!await appendBlob.ExistsAsync().ConfigureAwait(false))
             {
                 await appendBlob.CreateOrReplaceAsync().ConfigureAwait(false);
             }
+
+            await appendBlob.FetchAttributesAsync();
 
             var serializeTasks = records
                 .Select(async r => await _recordSerializer.Serialize(r).ConfigureAwait(false))
@@ -129,7 +131,9 @@ namespace Halforbit.RecordStreams.BlobStorage.Implementation
             .DeleteIfExistsAsync()
             .ConfigureAwait(false);
 
-        public async Task<IAsyncEnumerable<TRecord>> EnumerateAsync(TKey key)
+        public async Task<IAsyncEnumerable<TRecord>> EnumerateAsync(
+            TKey key,
+            long startIndex = 0)
         {
             if (!await Exists(key).ConfigureAwait(false))
             {
@@ -140,7 +144,7 @@ namespace Halforbit.RecordStreams.BlobStorage.Implementation
 
             var pipe = new Pipe();
 
-            var fillPipeTask = FillPipe(appendBlob, pipe.Writer);
+            var fillPipeTask = FillPipe(appendBlob, pipe.Writer, startIndex);
 
             return new AsyncEnumerable<TRecord>(async yield =>
             {
@@ -185,13 +189,93 @@ namespace Halforbit.RecordStreams.BlobStorage.Implementation
             });
         }
 
+        public async Task<IAsyncEnumerable<(long, TRecord)>> EnumerateIndexedAsync(
+            TKey key,
+            long startIndex = 0)
+        {
+            var currentIndex = startIndex;
+
+            if (!await Exists(key).ConfigureAwait(false))
+            {
+                return new AsyncEnumerable<(long, TRecord)>(async yield => { });
+            }
+
+            var appendBlob = GetAppendBlob(key);
+
+            var pipe = new Pipe();
+
+            var fillPipeTask = FillPipe(appendBlob, pipe.Writer, startIndex);
+
+            return new AsyncEnumerable<(long, TRecord)>(async yield =>
+            {
+                var pipeReader = pipe.Reader;
+
+                while (true)
+                {
+                    var readResult = await pipeReader.ReadAsync().ConfigureAwait(false);
+
+                    var buffer = readResult.Buffer;
+
+                    while (true)
+                    {
+                        var (record, bytesRead) = await _recordSerializer
+                            .Deserialize<TRecord>(buffer)
+                            .ConfigureAwait(false);
+
+                        if (bytesRead > 0)
+                        {
+                            await yield.ReturnAsync((currentIndex, record)).ConfigureAwait(false);
+
+                            var next = buffer.GetPosition(bytesRead);
+
+                            buffer = buffer.Slice(next);
+
+                            currentIndex += bytesRead;
+                        }
+                        else
+                        {
+                            break;
+                        }
+                    }
+
+                    pipeReader.AdvanceTo(buffer.Start, buffer.End);
+
+                    if (readResult.IsCompleted)
+                    {
+                        break;
+                    }
+                }
+
+                pipeReader.Complete();
+            });
+        }
+
         public async Task<bool> Exists(TKey key) => await GetAppendBlob(key)
             .ExistsAsync()
             .ConfigureAwait(false);
-        
+
+        public async Task<long> GetLength(TKey key)
+        {
+            var appendBlob = GetAppendBlob(key);
+
+            try
+            {
+                await appendBlob.FetchAttributesAsync();
+
+                return appendBlob.Properties.Length;
+            }
+            catch(StorageException stex)
+            {
+                if (stex.Message.ToLower().Contains("exist")) return 0;
+
+                throw;
+            }
+        }
+
         static async Task FillPipe(
             CloudAppendBlob appendBlob,
-            PipeWriter pipeWriter)
+            PipeWriter pipeWriter,
+            long startIndex)
         {
             const int bufferSize = 1000000;
 
@@ -201,7 +285,7 @@ namespace Halforbit.RecordStreams.BlobStorage.Implementation
 
             var buffer = new byte[bufferSize];
 
-            for (var i = 0; i < length; i += bufferSize)
+            for (var i = startIndex; i < length; i += bufferSize)
             {
                 try
                 {
