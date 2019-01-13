@@ -4,12 +4,16 @@ using Halforbit.RecordStreams.Interface;
 using Halforbit.RecordStreams.Serialization.Interface;
 using Microsoft.WindowsAzure.Storage;
 using Microsoft.WindowsAzure.Storage.Blob;
+using Microsoft.WindowsAzure.Storage.RetryPolicies;
 using System;
 using System.Buffers;
 using System.Collections.Async;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
 using System.IO.Pipelines;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Halforbit.RecordStreams.BlobStorage.Implementation
@@ -62,13 +66,34 @@ namespace Halforbit.RecordStreams.BlobStorage.Implementation
             _contentEncoding = contentEncoding;
         }
 
+        //static int instanceCount = 0;
+
+        //static object lockObj = new object();
+
+        //public static List<string> log = new List<string>();
+
         public async Task Append(
             TKey key,
             IEnumerable<TRecord> records)
         {
+            //Interlocked.Increment(ref instanceCount);
+
+            //lock(log) log.Add($"Up to {instanceCount}");
+
+            //lock (lockObj)
+            //{
+            //    instanceCount++;
+
+            //    using (var s = File.OpenWrite("out.txt"))
+            //    using (var w = new StreamWriter(s))
+            //    {
+            //        w.WriteLine("out.txt", new[] { $"Up to {instanceCount}" });
+            //    }
+            //}
+
             var appendBlob = GetAppendBlob(key);
-            
-            if(!await appendBlob.ExistsAsync().ConfigureAwait(false))
+
+            if (!await appendBlob.ExistsAsync().ConfigureAwait(false))
             {
                 await appendBlob.CreateOrReplaceAsync().ConfigureAwait(false);
             }
@@ -83,7 +108,7 @@ namespace Halforbit.RecordStreams.BlobStorage.Implementation
 
             var members = serializeTasks.Select(t => t.Result.ToArray());
 
-            if(_compressor != null)
+            if (_compressor != null)
             {
                 var compressTasks = members
                     .Select(async m => await _compressor.Compress(m).ConfigureAwait(false))
@@ -96,7 +121,26 @@ namespace Halforbit.RecordStreams.BlobStorage.Implementation
 
             var bytes = members.SelectMany(m => m).ToArray();
 
-            await appendBlob.AppendFromByteArrayAsync(bytes, 0, bytes.Length).ConfigureAwait(false);
+            if (bytes.Length == 0) return;
+
+            using (var ms = new MemoryStream(bytes))
+            {
+                await appendBlob.AppendBlockAsync(
+                    blockData: ms,
+                    contentMD5: null,
+                    accesscondition: null,
+                    options: new BlobRequestOptions
+                    {
+                        ParallelOperationThreadCount = Math.Min(64, 8 * 12),
+
+                        DisableContentMD5Validation = true,
+
+                        StoreBlobContentMD5 = false,
+
+                        RetryPolicy = new ExponentialRetry(TimeSpan.FromSeconds(2), 10)
+                    },
+                    operationContext: null).ConfigureAwait(false);
+            }
 
             var hasContentType = !string.IsNullOrWhiteSpace(_contentType);
 
@@ -106,27 +150,42 @@ namespace Halforbit.RecordStreams.BlobStorage.Implementation
             {
                 var updateProperties = false;
 
-                if(hasContentType && appendBlob.Properties.ContentType != _contentType)
+                if (hasContentType && appendBlob.Properties.ContentType != _contentType)
                 {
                     appendBlob.Properties.ContentType = _contentType;
 
                     updateProperties = true;
                 }
 
-                if(hasContentEncoding && appendBlob.Properties.ContentEncoding != _contentEncoding)
+                if (hasContentEncoding && appendBlob.Properties.ContentEncoding != _contentEncoding)
                 {
                     appendBlob.Properties.ContentEncoding = _contentEncoding;
 
                     updateProperties = true;
                 }
 
-                if(updateProperties)
+                if (updateProperties)
                 {
                     await appendBlob.SetPropertiesAsync();
                 }
             }
+
+            //Interlocked.Decrement(ref instanceCount);
+
+            //lock(log) log.Add($"Down to {instanceCount}");
+
+            //lock (lockObj)
+            //{
+            //    instanceCount--;
+
+            //    using (var s = File.OpenWrite("out.txt"))
+            //    using (var w = new StreamWriter(s))
+            //    {
+            //        w.WriteLine("out.txt", new[] { $"Up to {instanceCount}" });
+            //    }
+            //}
         }
-        
+
         public async Task<bool> Delete(TKey key) => await GetAppendBlob(key)
             .DeleteIfExistsAsync()
             .ConfigureAwait(false);
