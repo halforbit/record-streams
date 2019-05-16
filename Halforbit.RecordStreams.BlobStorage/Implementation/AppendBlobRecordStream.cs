@@ -201,14 +201,14 @@ namespace Halforbit.RecordStreams.BlobStorage.Implementation
 
             var appendBlob = GetAppendBlob(key);
 
-            var pipe = new Pipe();
+            var pipe = new Pipe(new PipeOptions(pauseWriterThreshold: 10_000_000));
 
             var fillPipeTask = FillPipe(appendBlob, pipe.Writer, startIndex);
 
             return new AsyncEnumerable<TRecord>(async yield =>
             {
                 var pipeReader = pipe.Reader;
-
+                
                 while (true)
                 {
                     var readResult = await pipeReader.ReadAsync().ConfigureAwait(false);
