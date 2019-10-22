@@ -20,6 +20,8 @@ namespace Halforbit.RecordStreams.Implementation
 
         readonly ConcurrentQueue<TRecord> _outboundRecords = new ConcurrentQueue<TRecord>();
 
+        bool _isStarted;
+
         public RecordExchanger(
             RecordExchangerConfig<TRecord> config)
         {
@@ -31,11 +33,16 @@ namespace Halforbit.RecordStreams.Implementation
             var t1 = Task.Run(DispatchOutboundRecords);
 
             var t2 = Task.Run(RetrieveInboundRecords);
+
+            _isStarted = true;
         }
 
         public void SubmitRecord(TRecord record)
         {
-            _outboundRecords.Enqueue(record);
+            if(_isStarted)
+            {
+                _outboundRecords.Enqueue(record);
+            }
         }
 
         async Task DispatchOutboundRecords()
