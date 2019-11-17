@@ -98,7 +98,7 @@ namespace Halforbit.RecordStreams.BlobStorage.Implementation
                 await appendBlob.CreateOrReplaceAsync().ConfigureAwait(false);
             }
 
-            await appendBlob.FetchAttributesAsync();
+            await appendBlob.FetchAttributesAsync().ConfigureAwait(false);
 
             var serializeTasks = records
                 .Select(async r => await _recordSerializer.Serialize(r).ConfigureAwait(false))
@@ -166,7 +166,7 @@ namespace Halforbit.RecordStreams.BlobStorage.Implementation
 
                 if (updateProperties)
                 {
-                    await appendBlob.SetPropertiesAsync();
+                    await appendBlob.SetPropertiesAsync().ConfigureAwait(false);
                 }
             }
 
