@@ -2,7 +2,7 @@
 using Halforbit.RecordStreams.Serialization.Text.Implementation;
 using System;
 
-namespace Halforbit.RecordStreams.Serialization.ByteSpan.Facets
+namespace Halforbit.RecordStreams.Serialization.Text.Facets
 {
     public class TextLineRecordSerializationAttribute : FacetAttribute
     {
