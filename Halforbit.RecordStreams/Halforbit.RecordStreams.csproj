@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <PackageReference Include="AsyncEnumerator" Version="3.0.2-beta" />
+    <PackageReference Include="Halforbit.BitBuffers" Version="1.0.9" />
     <PackageReference Include="Halforbit.Facets" Version="1.0.44" />
     <PackageReference Include="Newtonsoft.Json" Version="9.0.1" />
     <PackageReference Include="SharpCompress" Version="0.22.0" />
