@@ -386,7 +386,12 @@ namespace Halforbit.RecordStreams.BlobStorage.Implementation
                     }
                     else if (item is CloudAppendBlob cloudAppendBlob)
                     {
-                        results.Add(cloudAppendBlob.Name);
+                        var name = cloudAppendBlob.Name;
+
+                        if (name.EndsWith(extension, StringComparison.OrdinalIgnoreCase))
+                        {
+                            results.Add(name.Substring(0, name.Length - extension.Length));
+                        }
                     }
                 }
 
