@@ -1,5 +1,7 @@
-﻿using System.Collections.Async;
+﻿using System;
+using System.Collections.Async;
 using System.Collections.Generic;
+using System.Linq.Expressions;
 using System.Threading.Tasks;
 
 namespace Halforbit.RecordStreams.Interface
@@ -19,5 +21,7 @@ namespace Halforbit.RecordStreams.Interface
         Task<bool> Exists(TKey key);
 
         Task<long> GetLength(TKey key);
+
+        Task<IEnumerable<TKey>> ListKeys(Expression<Func<TKey, bool>> predicate = null);
     }
 }
