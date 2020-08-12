@@ -1,5 +1,6 @@
 ﻿using Halforbit.Facets.Attributes;
 using Halforbit.ObjectTools.Collections;
+using Halforbit.ObjectTools.Extensions;
 using Halforbit.ObjectTools.InvariantExtraction.Implementation;
 using Halforbit.ObjectTools.ObjectStringMap.Implementation;
 using Halforbit.RecordStreams.Exceptions;
@@ -341,7 +342,7 @@ namespace Halforbit.RecordStreams.BlobStorage.Implementation
 
             var keyStrings = await ListKeyStrings(pathPrefix, _fileExtension);
 
-            var keyPaths = keyStrings.Select(s => _keyMap.Map(s)).Where(k => k != default);
+            var keyPaths = keyStrings.Select(s => _keyMap.Map(s)).Where(k => !k.IsDefaultValue());
 
             if (predicate != null)
             {
