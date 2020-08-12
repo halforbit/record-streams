@@ -9,8 +9,8 @@
 
   <ItemGroup>
     <PackageReference Include="AsyncEnumerator" Version="3.0.2-beta" />
-    <PackageReference Include="Halforbit.Facets" Version="1.0.44" />
-    <PackageReference Include="Halforbit.ObjectTools" Version="1.0.22" />
+    <PackageReference Include="Halforbit.Facets" Version="1.0.48" />
+    <PackageReference Include="Halforbit.ObjectTools" Version="1.1.10" />
     <PackageReference Include="System.IO.Pipelines" Version="4.6.0-preview5.19224.8" />
     <PackageReference Include="WindowsAzure.Storage" Version="9.3.3" />
   </ItemGroup>
