@@ -46,9 +46,9 @@ hello charlie
             var (actual, bytesRead) = await serializer.Deserialize<string>(
                 new ReadOnlySequence<byte>(serialized));
 
-            Assert.Equal("hello alfa\n", actual);
+            Assert.Equal("hello alfa\r\n", actual);
 
-            Assert.Equal(11, bytesRead);
+            Assert.Equal(12, bytesRead);
         }
     }
 }

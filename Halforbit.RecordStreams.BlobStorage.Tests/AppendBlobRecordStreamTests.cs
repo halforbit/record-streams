@@ -77,7 +77,9 @@ namespace Halforbit.RecordStreams.BlobStorage.Tests
 
             var batchC = new TestRecord[0];
 
-            var context = new ContextFactory(new FrameworkConfigurationProvider(_configuration)).Create<ITestContext>();
+            var context =
+                //new ContextFactory(new FrameworkConfigurationProvider(_configuration)).Create<ITestContext>();
+                new TestContext(new FrameworkConfigurationProvider(_configuration));
 
             var recordStream = context.TestJsonLinesRecordStream;
 
@@ -258,6 +260,34 @@ namespace Halforbit.RecordStreams.BlobStorage.Tests
         [KeyMap("append-blob-record-stream/{this}")]
         IRecordStream<Guid, byte[]> TestFixedByteSpanRecordStream { get; }
     }
+
+    class TestContext : ITestContext
+    {
+        readonly Halforbit.Facets.Interface.IConfigurationProvider _config;
+
+        public TestContext(Halforbit.Facets.Interface.IConfigurationProvider config)
+        {
+            _config = config;
+        }
+
+        public IRecordStream<Guid, TestRecord> TestJsonLinesRecordStream => RecordStream
+            .Describe()
+            .BlobStorage()
+            .ConnectionString(_config.GetValue("ConnectionString"))
+            .Container("record-streams-test")
+            .ContentType("application/x-jsonlines")
+            .DefaultContentEncoding()
+            .JsonLinesSerialization()
+            .NoCompression()
+            .FileExtension(".jsonl")
+            .Map<Guid, TestRecord>("append-blob-record-stream/{this}")
+            .Build();
+
+        public IRecordStream<Guid, byte[]> TestByteSpanRecordStream => throw new NotImplementedException();
+
+        public IRecordStream<Guid, byte[]> TestFixedByteSpanRecordStream => throw new NotImplementedException();
+    }
+
 
     public class TestRecord
     {
