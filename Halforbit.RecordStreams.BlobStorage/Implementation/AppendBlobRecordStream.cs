@@ -1,5 +1,8 @@
 ﻿using Halforbit.Facets.Attributes;
+using Halforbit.ObjectTools.Collections;
+using Halforbit.ObjectTools.InvariantExtraction.Implementation;
 using Halforbit.ObjectTools.ObjectStringMap.Implementation;
+using Halforbit.RecordStreams.Exceptions;
 using Halforbit.RecordStreams.Interface;
 using Halforbit.RecordStreams.Serialization.Interface;
 using Microsoft.WindowsAzure.Storage;
@@ -8,12 +11,11 @@ using Microsoft.WindowsAzure.Storage.RetryPolicies;
 using System;
 using System.Buffers;
 using System.Collections.Async;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Pipelines;
 using System.Linq;
-using System.Threading;
+using System.Linq.Expressions;
 using System.Threading.Tasks;
 
 namespace Halforbit.RecordStreams.BlobStorage.Implementation
@@ -21,6 +23,8 @@ namespace Halforbit.RecordStreams.BlobStorage.Implementation
     public class AppendBlobRecordStream<TKey, TRecord> : 
         IRecordStream<TKey, TRecord>
     {
+        readonly InvariantExtractor _invariantExtractor = new InvariantExtractor();
+
         readonly IRecordSerializer _recordSerializer;
 
         readonly ICompressor _compressor;
@@ -328,6 +332,89 @@ namespace Halforbit.RecordStreams.BlobStorage.Implementation
                 if (stex.Message.ToLower().Contains("exist")) return 0;
 
                 throw;
+            }
+        }
+
+        public async Task<IEnumerable<TKey>> ListKeys(Expression<Func<TKey, bool>> predicate = null)
+        {
+            var pathPrefix = ResolveKeyStringPrefix(predicate);
+
+            var keyStrings = await ListKeyStrings(pathPrefix, _fileExtension);
+
+            var keyPaths = keyStrings.Select(s => _keyMap.Map(s)).Where(k => k != default);
+
+            if (predicate != null)
+            {
+                Func<TKey, bool> selectorFunc = predicate.Compile();
+
+                keyPaths = keyPaths.Where(k => selectorFunc(k));
+            }
+
+            return keyPaths.ToList();
+        }
+
+        string ResolveKeyStringPrefix(Expression<Func<TKey, bool>> selector)
+        {
+            var memberValues = EmptyReadOnlyDictionary<string, object>.Instance as
+                IReadOnlyDictionary<string, object>;
+
+            if (selector != null)
+            {
+                memberValues = _invariantExtractor.ExtractInvariantDictionary(selector, out _);
+            }
+
+            return EvaluatePath(memberValues, true);
+        }
+
+        async Task<IEnumerable<string>> ListKeyStrings(string pathPrefix, string extension)
+        {
+            var results = new List<string>();
+
+            var blobContinuationToken = default(BlobContinuationToken);
+
+            do
+            {
+                var resultSegment = await _cloudBlobContainer.ListBlobsSegmentedAsync(
+                    pathPrefix,
+                    blobContinuationToken);
+
+                foreach (var item in resultSegment.Results)
+                {
+                    if (item is CloudBlobDirectory cloudBlobDirectory)
+                    {
+                        results.AddRange(await ListKeyStrings(cloudBlobDirectory.Prefix, extension));
+                    }
+                    else if (item is CloudAppendBlob cloudAppendBlob)
+                    {
+                        var name = cloudAppendBlob.Name;
+
+                        if (name.EndsWith(extension, StringComparison.OrdinalIgnoreCase))
+                        {
+                            results.Add(name.Substring(0, name.Length - extension.Length));
+                        }
+                    }
+                }
+
+                blobContinuationToken = resultSegment.ContinuationToken;
+            }
+            while (blobContinuationToken != null);
+
+            return results;
+        }
+
+        string EvaluatePath(
+            IReadOnlyDictionary<string, object> memberValues,
+            bool allowPartialMap = false)
+        {
+            try
+            {
+                return _keyMap.Map(memberValues, allowPartialMap);
+            }
+            catch (ArgumentNullException ex)
+            {
+                throw new IncompleteKeyException(
+                    $"Path for {typeof(TRecord).Name} could not be evaluated " +
+                    $"because key {typeof(TKey).Name} was missing a value for {ex.ParamName}.");
             }
         }
 
