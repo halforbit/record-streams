@@ -11,7 +11,7 @@
     <PackageReference Include="AsyncEnumerator" Version="3.0.2-beta" />
     <PackageReference Include="Halforbit.BitBuffers" Version="1.0.12" />
     <PackageReference Include="Halforbit.Facets" Version="1.0.48" />
-    <PackageReference Include="Newtonsoft.Json" Version="9.0.1" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
     <PackageReference Include="SharpCompress" Version="0.22.0" />
     <PackageReference Include="System.IO.Pipelines" Version="4.6.0-preview5.19224.8" />
     <PackageReference Include="System.Memory" Version="4.5.1" />
